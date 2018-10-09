@@ -2,69 +2,53 @@ require 'spec_helper'
 
 class Item < Sequel::Model
   plugin :enum
+  enum :condition, [:mint, :very_good, :good, :poor]
+  enum :edition, { first: 0, second: 1, rare: 2, other: 3 }
 end
 
 AbstractModel = Class.new(Sequel::Model)
 AbstractModel.require_valid_table = false
 AbstractModel.plugin :enum
 
-class RealModel < AbstractModel; end
+class RealModel < AbstractModel
+  enum :condition, [:mint, :very_good, :fair]
+end
+
+class Conflict < Sequel::Model
+  plugin :enum
+  enum :status, [:open, :waiting, :finished]
+end
 
 describe "sequel_enum" do
   let(:item) { Item.new }
 
   specify "class should provide reflection" do
-    Item.enum :condition, [:mint, :very_good, :fair]
-    expect(Item.enums).to eq({ condition: { :mint => 0, :very_good => 1, :fair => 2}})
+    expect(Item.enums[:condition]).to eq({ mint: 0, very_good: 1, good: 2, poor: 3 })
+    expect(Item.enums[:edition]).to eq({ first: 0, other: 3, rare: 2, second: 1 })
   end
 
   specify "inheriting from abstract model should provide reflection" do
-    RealModel.enum :condition, [:mint, :very_good, :fair]
     expect(RealModel.enums).to eq({ condition: { :mint => 0, :very_good => 1, :fair => 2}})
   end
 
-  specify "it accepts an array of symbols" do
-    expect{
-      Item.enum :condition, [:mint, :very_good, :good, :poor]
-    }.not_to raise_error
-  end
-
-  specify "it accepts a hash of index => value" do
-    expect{
-      Item.enum :condition, :mint => 0, :very_good => 1, :good => 2, :poor => 3
-    }.not_to raise_error
-  end
-
-  specify "it rejects an invalid hash" do
-    expect{
-      Item.enum :condition, { :mint => '0' }
-    }.to raise_error(ArgumentError)
+  specify "it raises ArgumentError when enum conflict definition" do
+    expect do
+      Conflict.enum :status, [:new, :pending, :closed]
+    end.to raise_error(ArgumentError, /You tried to define an enum named "status" on the model "Conflict"/)
   end
 
   specify "it rejects when it's not an array or hash" do
     expect{
-      Item.enum :condition, 'whatever'
+      Item.enum :state, 'whatever'
     }.to raise_error(ArgumentError)
   end
 
-  describe "methods" do
-    before(:all) do
-      Item.enum :condition, [:mint, :very_good, :good, :poor]
-      Item.enum :edition, {first: 0, second: 1, rare: 2, other: 3}
-    end
+  specify "generate a class method to access the enum mapping" do
+    expect(Item.conditions).to eq({mint: 0, very_good: 1, good: 2, poor: 3})
+    expect(Item.editions).to eq({first: 0, second: 1, rare: 2, other: 3})
+  end
 
-    context "list enums of a column" do
-      describe ".conditions" do
-        it "return the enum list options defined for condition" do
-          expect(Item.conditions).to eq({mint: 0, very_good: 1, good: 2, poor: 3})
-        end
-      end
-      describe ".editions" do
-        it "return the enum list options defined for condition" do
-          expect(Item.editions).to eq({first: 0, second: 1, rare: 2, other: 3})
-        end
-      end
-    end
+  describe "methods" do
 
     describe "#initialize_set" do
       it "handles multiple enums" do
