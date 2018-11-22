@@ -37,6 +37,18 @@ describe "sequel_enum" do
     end.to raise_error(ArgumentError, /You tried to define an enum named "status" on the model "Conflict"/)
   end
 
+  specify "raises ArgumentError when enum conflict with previous defined method" do
+    class Foo < AbstractModel
+      def bar
+        puts "bar"
+      end
+    end
+
+    expect do
+      Foo.enum :bar, [:a, :b]
+    end.to raise_error(ArgumentError, /You tried to define an enum named "bar" on the model "Foo", but this will generate a instance method "bar"/)
+  end
+
   specify "it rejects when it's not an array or hash" do
     expect{
       Item.enum :state, 'whatever'

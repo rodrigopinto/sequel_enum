@@ -27,8 +27,11 @@ module Sequel
             raise ArgumentError, "#enum expects the second argument to be an array of symbols or a hash like { :symbol => integer }"
           end
 
-          detect_enum_conflict!(column, column.to_s.pluralize)
+          detect_enum_conflict!(column, column.to_s.pluralize, true)
           klass.singleton_class.send(:define_method, column.to_s.pluralize) { enum_values }
+
+          detect_enum_conflict!(column, column)
+          detect_enum_conflict!(column, "#{column}=")
 
           define_method "#{column}=" do |value|
             val = self.class.enums[column].assoc(value.to_sym)
@@ -55,9 +58,11 @@ module Sequel
           "You tried to define an enum named \"%{enum}\" on the model \"%{klass}\", but " \
           "this will generate a %{type} method \"%{method}\", which is already defined."
 
-        def detect_enum_conflict!(column, method_name)
-          if self.respond_to?(method_name, true)
-            raise_conflict_error(column, method_name, type: "class")
+        def detect_enum_conflict!(enum_name, method_name, klass_method = false)
+          if klass_method && self.respond_to?(method_name, true)
+            raise_conflict_error(enum_name, method_name, type: "class")
+          elsif !klass_method && dangerous_attribute_name?(method_name)
+            raise_conflict_error(enum_name, method_name)
           end
         end
 
@@ -68,6 +73,20 @@ module Sequel
             type: type,
             method: method_name
           }
+        end
+
+        def dangerous_attribute_name?(method_name)
+          instance_methods_include?(method_name) && !sequel_column?(method_name)
+        end
+
+        def instance_methods_include?(method_name)
+          self.instance_methods.include?(method_name)
+        end
+
+        def sequel_column?(method_name)
+          !self[method_name]
+        rescue Sequel::DatabaseError
+          false
         end
       end
     end
